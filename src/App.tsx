@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { resolveResource } from "@tauri-apps/api/path";
 import Board from "./components/board/Board";
 import MoveTree from "./components/board/MoveTree";
 import Sidebar from "./components/library/Sidebar";
@@ -6,6 +7,7 @@ import FileList from "./components/library/FileList";
 import GameInfo from "./components/library/GameInfo";
 import CommentPanel from "./components/board/CommentPanel";
 import VariationPicker from "./components/board/VariationPicker";
+import { isTauriEnv } from "./lib/ipc";
 import { useLibraryStore } from "./stores/libraryStore";
 import { currentFen, selectNode, useGameStore } from "./stores/gameStore";
 
@@ -36,7 +38,6 @@ export default function App() {
   const libraryRoot = useLibraryStore((s) => s.root);
   const loading = useLibraryStore((s) => s.loading);
   const libraryError = useLibraryStore((s) => s.error);
-  const importFolder = useLibraryStore((s) => s.importFolder);
   const rescan = useLibraryStore((s) => s.rescan);
   const totalFiles = useLibraryStore((s) => s.files.length);
 
@@ -117,8 +118,8 @@ export default function App() {
   }, [goNext, goPrev, switchVariation, goToStart, goToEnd, toggleFlip, pickerOpen, pickBranch, closePicker]);
 
   useEffect(() => {
-    const lib = useLibraryStore.getState();
-    if (lib.root && lib.files.length === 0) void lib.rescan();
+    if (!isTauriEnv()) return;
+    void resolveResource("resources/games").then((dir) => useLibraryStore.getState().setRoot(dir));
   }, []);
 
   const boardAreaRef = useRef<HTMLElement | null>(null);
@@ -155,12 +156,6 @@ export default function App() {
         </div>
 
         <div className="ml-6 flex items-center gap-2">
-          <button
-            onClick={() => void importFolder()}
-            className="rounded-md bg-verm-600 px-3.5 py-1.5 text-sm font-medium text-white transition-colors hover:bg-verm-500"
-          >
-            {libraryRoot ? "更换棋谱库" : "导入棋谱库"}
-          </button>
           {libraryRoot && (
             <button
               onClick={() => void rescan()}
@@ -264,7 +259,7 @@ export default function App() {
           {!hasGame && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="rounded-xl border border-ink-700 bg-ink-900/90 px-6 py-4 text-center shadow-xl">
-                <p className="text-gold-300">导入棋谱库后，点击任一棋谱即可开始复盘</p>
+                <p className="text-gold-300">从左侧选择一盘棋，即可开始复盘</p>
                 <p className="mt-1 text-xs text-ink-400">
                   快捷键：← → 或滚轮前后翻着法 · ↑ ↓ 切换变例 · Home/End 首末 · F 翻转棋盘
                 </p>
