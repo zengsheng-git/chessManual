@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+@theme {
+  --font-piece: "KaiTi", "STKaiti", "DFKai-SB", "BiauKai", "SimKai", serif;
+  --color-ink-950: var(--c-ink-950);
+  --color-ink-900: var(--c-ink-900);
+  --color-ink-850: var(--c-ink-850);
+  --color-ink-800: var(--c-ink-800);
+  --color-ink-700: var(--c-ink-700);
+  --color-ink-600: var(--c-ink-600);
+  --color-ink-400: var(--c-ink-400);
+  --color-ink-300: var(--c-ink-300);
+  --color-ink-200: var(--c-ink-200);
+  --color-gold-300: var(--c-gold-300);
+  --color-gold-400: var(--c-gold-400);
+  --color-gold-500: var(--c-gold-500);
+  --color-verm-400: var(--c-verm-400);
+  --color-verm-500: var(--c-verm-500);
+  --color-verm-600: var(--c-verm-600);
+}
+
+:root {
+  --c-ink-950: #e9e0cc;
+  --c-ink-900: #f5f0e2;
+  --c-ink-850: #f2ecdb;
+  --c-ink-800: #faf6ec;
+  --c-ink-700: #e4dbc4;
+  --c-ink-600: #cfc2a4;
+  --c-ink-400: #98876a;
+  --c-ink-300: #6f6046;
+  --c-ink-200: #3c342a;
+  --c-gold-300: #7e5e0e;
+  --c-gold-400: #9a7410;
+  --c-gold-500: #b08a2e;
+  --c-verm-400: #c24832;
+  --c-verm-500: #b23a24;
+  --c-verm-600: #a03020;
+  color-scheme: light;
+}
+
+:root.dark {
+  --c-ink-950: #100e0b;
+  --c-ink-900: #16130f;
+  --c-ink-850: #1c1813;
+  --c-ink-800: #221d17;
+  --c-ink-700: #2e2820;
+  --c-ink-600: #3d362b;
+  --c-ink-400: #8a8070;
+  --c-ink-300: #b0a794;
+  --c-ink-200: #d6cec0;
+  --c-gold-300: #e8c37a;
+  --c-gold-400: #d9a648;
+  --c-gold-500: #c08a2e;
+  --c-verm-400: #e0604a;
+  --c-verm-500: #c2402a;
+  --c-verm-600: #a03020;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  min-width: 1080px;
+  overflow-x: auto;
+}
+
+body {
+  background: var(--color-ink-950);
+  color: var(--color-ink-200);
+  font-family:
+    "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", system-ui,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-700);
+  border-radius: 5px;
+  border: 2px solid var(--color-ink-950);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-600);
+}

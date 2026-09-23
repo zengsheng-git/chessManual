@@ -1,0 +1,21 @@
+[package]
+name = "chessmanual"
+version = "0.1.0"
+description = "棋枰棋谱 - 中国象棋棋谱整理与复盘"
+edition = "2021"
+
+[lib]
+name = "chessmanual_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.dev]
+incremental = true
