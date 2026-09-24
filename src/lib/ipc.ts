@@ -19,3 +19,15 @@ export async function readFileBytes(path: string): Promise<Uint8Array> {
   const arr = await invoke<number[]>("read_file_bytes", { path });
   return new Uint8Array(arr);
 }
+
+export function revealInExplorer(path: string): Promise<void> {
+  return invoke("reveal_in_explorer", { path });
+}
+
+export function deleteGameFile(path: string): Promise<void> {
+  return invoke("delete_game_file", { path });
+}
+
+export function deleteGameDir(path: string): Promise<void> {
+  return invoke("delete_game_dir", { path });
+}

@@ -10,12 +10,15 @@ interface LibraryState {
   selectedDir: string;
   query: string;
   currentPath: string | null;
+  revealPath: string | null;
   setRoot: (root: string) => Promise<void>;
   rescan: () => Promise<void>;
   toggleDir: (dir: string) => void;
   selectDir: (dir: string) => void;
   setQuery: (q: string) => void;
   setCurrentPath: (p: string | null) => void;
+  revealTo: (path: string) => Promise<void>;
+  clearReveal: () => void;
 }
 
 export const useLibraryStore = create<LibraryState>()(
@@ -28,6 +31,7 @@ export const useLibraryStore = create<LibraryState>()(
     selectedDir: "",
     query: "",
     currentPath: null,
+    revealPath: null,
 
     setRoot: async (root) => {
       set({ root, loading: true, error: null, selectedDir: "", expanded: {} });
@@ -67,5 +71,15 @@ export const useLibraryStore = create<LibraryState>()(
       }),
     setQuery: (query) => set({ query }),
     setCurrentPath: (currentPath) => set({ currentPath }),
+
+    // 保存/导入后定位新棋谱: 切回全部棋谱并标记目标, 重扫后由列表滚动到该项
+    revealTo: async (path) => {
+      set({ revealPath: path });
+      get().selectDir("");
+      get().setCurrentPath(path);
+      await get().rescan();
+    },
+
+    clearReveal: () => set({ revealPath: null }),
   }),
 );

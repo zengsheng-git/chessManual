@@ -1,6 +1,8 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useLibraryStore } from "../../stores/libraryStore";
-import type { FileEntry } from "../../lib/ipc";
+import { useGameStore } from "../../stores/gameStore";
+import { deleteGameDir, type FileEntry } from "../../lib/ipc";
+import ConfirmDialog from "../common/ConfirmDialog";
 
 interface DirNode {
   name: string;
@@ -51,7 +53,7 @@ function buildTree(files: FileEntry[], root: string): DirNode[] {
   return attach(Array.from(top.values()).sort((a, b) => a.name.localeCompare(b.name, "zh-CN")));
 }
 
-function DirItem({ node, depth }: { node: DirNode; depth: number }) {
+function DirItem({ node, depth, onDelete }: { node: DirNode; depth: number; onDelete: (node: DirNode) => void }) {
   const expanded = useLibraryStore((s) => !!s.expanded[node.path]);
   const selected = useLibraryStore((s) => s.selectedDir === node.path);
   const toggleDir = useLibraryStore((s) => s.toggleDir);
@@ -61,7 +63,7 @@ function DirItem({ node, depth }: { node: DirNode; depth: number }) {
     <div>
       <div
         className={[
-          "flex w-full items-center rounded-md pr-1 text-sm transition-colors",
+          "group flex w-full items-center rounded-md pr-1 text-sm transition-colors",
           selected ? "bg-gold-400/15" : "hover:bg-ink-800/70",
         ].join(" ")}
         style={{ paddingLeft: 8 + depth * 16 }}
@@ -86,11 +88,19 @@ function DirItem({ node, depth }: { node: DirNode; depth: number }) {
             {node.count}
           </span>
         </button>
+        <button
+          onClick={() => onDelete(node)}
+          title="删除文件夹（移入回收站）"
+          aria-label={`删除文件夹 ${node.name}`}
+          className="ml-0.5 shrink-0 rounded p-1 text-xs leading-none text-ink-400 opacity-0 transition-opacity hover:bg-verm-500/25 hover:text-verm-400 focus-visible:opacity-100 group-hover:opacity-100"
+        >
+          🗑
+        </button>
       </div>
       {expanded && (
         <div>
           {node.children.map((c) => (
-            <DirItem key={c.path} node={c} depth={depth + 1} />
+            <DirItem key={c.path} node={c} depth={depth + 1} onDelete={onDelete} />
           ))}
         </div>
       )}
@@ -104,7 +114,29 @@ export default function Sidebar() {
   const selectedDir = useLibraryStore((s) => s.selectedDir);
   const selectDir = useLibraryStore((s) => s.selectDir);
 
+  const [confirmTarget, setConfirmTarget] = useState<DirNode | null>(null);
+
   const tree = useMemo(() => buildTree(files, root ?? ""), [files, root]);
+
+  const confirmRemoveDir = async () => {
+    if (!confirmTarget) return;
+    const { path } = confirmTarget;
+    setConfirmTarget(null);
+    try {
+      await deleteGameDir(path);
+      const norm = path.replace(/\\/g, "/").replace(/\/+$/, "");
+      const lib = useLibraryStore.getState();
+      const sel = lib.selectedDir.replace(/\\/g, "/");
+      if (sel === norm || sel.startsWith(norm + "/")) lib.selectDir("");
+      const openPath = useGameStore.getState().filePath;
+      if (openPath && openPath.replace(/\\/g, "/").startsWith(norm + "/")) {
+        useGameStore.getState().closeGame();
+      }
+      await lib.rescan();
+    } catch (e) {
+      alert(`删除失败：${e}`);
+    }
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -128,9 +160,23 @@ export default function Sidebar() {
           </span>
         </button>
         {tree.map((n) => (
-          <DirItem key={n.path} node={n} depth={0} />
+          <DirItem key={n.path} node={n} depth={0} onDelete={setConfirmTarget} />
         ))}
       </div>
+      {confirmTarget && (
+        <ConfirmDialog
+          title="删除确认"
+          message={
+            <span title={confirmTarget.path}>
+              确定删除文件夹「{confirmTarget.name}」（含 {confirmTarget.count} 盘棋谱）吗？
+            </span>
+          }
+          hint="文件夹将连同其中棋谱一并移入系统回收站，误删可恢复。"
+          confirmText="删除"
+          onConfirm={() => void confirmRemoveDir()}
+          onCancel={() => setConfirmTarget(null)}
+        />
+      )}
     </div>
   );
 }
