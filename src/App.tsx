@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { resolveResource } from "@tauri-apps/api/path";
+import { invoke } from "@tauri-apps/api/core";
 import Board from "./components/board/Board";
 import MoveTree from "./components/board/MoveTree";
 import Sidebar from "./components/library/Sidebar";
@@ -7,9 +7,11 @@ import FileList from "./components/library/FileList";
 import GameInfo from "./components/library/GameInfo";
 import CommentPanel from "./components/board/CommentPanel";
 import VariationPicker from "./components/board/VariationPicker";
+import RecordPanel from "./components/record/RecordPanel";
 import { isTauriEnv } from "./lib/ipc";
 import { useLibraryStore } from "./stores/libraryStore";
 import { currentFen, selectNode, useGameStore } from "./stores/gameStore";
+import { useRecorderStore } from "./stores/recorderStore";
 
 function ControlButton({
   onClick,
@@ -56,6 +58,11 @@ export default function App() {
   const pickerOpen = useGameStore((s) => s.pickerOpen);
   const pickBranch = useGameStore((s) => s.pickBranch);
   const closePicker = useGameStore((s) => s.closePicker);
+
+  const recorderActive = useRecorderStore(
+    (s) => s.phase === "recording" || s.phase === "locating",
+  );
+  const [recordOpen, setRecordOpen] = useState(false);
 
   const [theme, setTheme] = useState<"light" | "dark">(() =>
     document.documentElement.classList.contains("dark") ? "dark" : "light",
@@ -119,7 +126,9 @@ export default function App() {
 
   useEffect(() => {
     if (!isTauriEnv()) return;
-    void resolveResource("resources/games").then((dir) => useLibraryStore.getState().setRoot(dir));
+    void invoke<string>("library_dir")
+      .then((dir) => useLibraryStore.getState().setRoot(dir))
+      .catch((e) => console.error("获取棋谱库目录失败：", e));
   }, []);
 
   const boardAreaRef = useRef<HTMLElement | null>(null);
@@ -177,6 +186,15 @@ export default function App() {
               <span className="rounded-full bg-ink-800 px-2 py-0.5">共 {totalFiles} 盘</span>
             </>
           )}
+          <ControlButton
+            onClick={() => setRecordOpen(true)}
+            title="录制对方棋软窗口的着法，可导出 PGN 或导入复盘台"
+          >
+            {recorderActive && (
+              <span className="mr-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-verm-500 align-middle" />
+            )}
+            录制棋谱
+          </ControlButton>
           <ControlButton onClick={toggleTheme} title="切换日间/夜间模式">
             {theme === "light" ? "🌙 夜间" : "☀️ 日间"}
           </ControlButton>
@@ -284,6 +302,8 @@ export default function App() {
           {game && <CommentPanel />}
         </aside>
       </div>
+
+      {recordOpen && <RecordPanel onClose={() => setRecordOpen(false)} />}
     </div>
   );
 }

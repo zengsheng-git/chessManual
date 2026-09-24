@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { readFileBytes, isTauriEnv } from "../lib/ipc";
 import { parseXqf, type MoveNode, type ParsedGame } from "../lib/xqf/parser";
+import { parsePgn } from "../lib/pgn/parser";
 import { START_FEN, parseFen } from "../lib/board/fen";
 
 export function selectNode(game: ParsedGame | null, path: number[]): MoveNode | null {
@@ -83,7 +84,10 @@ export const useGameStore = create<GameState>()((set, get) => ({
     set({ loading: true, error: null });
     try {
       const bytes = await readFileBytes(filePath);
-      const game = parseXqf(bytes, fileName);
+      // 按扩展名分流: PGN 为文本格式, XQF 为二进制格式
+      const game = /\.pgn$/i.test(fileName)
+        ? parsePgn(new TextDecoder().decode(bytes), fileName)
+        : parseXqf(bytes, fileName);
       set({
         game,
         fileName,
