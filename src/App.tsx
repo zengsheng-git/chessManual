@@ -6,7 +6,7 @@ import Sidebar from "./components/library/Sidebar";
 import FileList from "./components/library/FileList";
 import GameInfo from "./components/library/GameInfo";
 import CommentPanel from "./components/board/CommentPanel";
-import VariationPicker from "./components/board/VariationPicker";
+import VariationPicker, { type MovePreview } from "./components/board/VariationPicker";
 import RecordPanel from "./components/record/RecordPanel";
 import { isTauriEnv } from "./lib/ipc";
 import { useLibraryStore } from "./stores/libraryStore";
@@ -63,6 +63,7 @@ export default function App() {
     (s) => s.phase === "recording" || s.phase === "locating",
   );
   const [recordOpen, setRecordOpen] = useState(false);
+  const [previewMove, setPreviewMove] = useState<MovePreview | null>(null);
 
   const [theme, setTheme] = useState<"light" | "dark">(() =>
     document.documentElement.classList.contains("dark") ? "dark" : "light",
@@ -222,7 +223,12 @@ export default function App() {
           title="滚轮可前后翻看着法"
         >
           <div className="flex min-h-0 w-full flex-1 items-center justify-center">
-            <Board fen={fen} flipped={flipped} lastMove={node ? { from: node.from, to: node.to } : null} />
+            <Board
+              fen={fen}
+              flipped={flipped}
+              lastMove={node ? { from: node.from, to: node.to } : null}
+              previewMove={previewMove}
+            />
           </div>
 
           <div className="flex shrink-0 items-center gap-2 pt-3">
@@ -291,10 +297,10 @@ export default function App() {
             </div>
           )}
 
-          {pickerOpen && <VariationPicker />}
         </main>
 
-        <aside className="flex w-[340px] shrink-0 flex-col border-l border-ink-800 bg-ink-900">
+        <aside className="relative flex w-[340px] shrink-0 flex-col border-l border-ink-800 bg-ink-900">
+          {pickerOpen && <VariationPicker onPreview={setPreviewMove} />}
           {game && <GameInfo />}
           <div className="min-h-0 flex-1">
             <MoveTree />

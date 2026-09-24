@@ -14,6 +14,7 @@ interface BoardProps {
   fen: string;
   flipped: boolean;
   lastMove: { from: Pos; to: Pos } | null;
+  previewMove?: { from: Pos; to: Pos } | null;
 }
 
 function cornerPath(
@@ -35,7 +36,7 @@ function cornerPath(
   return parts.join(" ");
 }
 
-export default function Board({ fen, flipped, lastMove }: BoardProps) {
+export default function Board({ fen, flipped, lastMove, previewMove }: BoardProps) {
   const { board } = useMemo(() => parseFen(fen), [fen]);
 
   const px = (x: number) => PAD + (flipped ? 8 - x : x) * CELL;
@@ -281,6 +282,31 @@ export default function Board({ fen, flipped, lastMove }: BoardProps) {
           opacity="0.5"
           markerEnd="url(#arrowHead)"
         />
+      )}
+
+      {previewMove && (
+        <>
+          <circle
+            cx={px(previewMove.from.x)}
+            cy={py(previewMove.from.y)}
+            r={R - 2}
+            fill="none"
+            stroke="#0e7490"
+            strokeWidth="2.5"
+            strokeDasharray="5 4"
+            opacity="0.9"
+          />
+          <circle
+            cx={px(previewMove.to.x)}
+            cy={py(previewMove.to.y)}
+            r={R}
+            fill="#22d3ee"
+            fillOpacity="0.35"
+            stroke="#0e7490"
+            strokeWidth="2.5"
+            strokeDasharray="5 4"
+          />
+        </>
       )}
     </svg>
   );
