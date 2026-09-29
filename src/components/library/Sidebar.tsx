@@ -3,6 +3,7 @@ import { useLibraryStore } from "../../stores/libraryStore";
 import { useGameStore } from "../../stores/gameStore";
 import { deleteGameDir, type FileEntry } from "../../lib/ipc";
 import ConfirmDialog from "../common/ConfirmDialog";
+import InputDialog from "../common/InputDialog";
 
 interface DirNode {
   name: string;
@@ -17,7 +18,7 @@ function relPath(file: string, root: string): string {
   return normFile.startsWith(normRoot) ? normFile.slice(normRoot.length) : normFile;
 }
 
-function buildTree(files: FileEntry[], root: string): DirNode[] {
+function buildTree(files: FileEntry[], dirs: string[], root: string): DirNode[] {
   const top = new Map<string, DirNode>();
   const getOrCreate = (map: Map<string, DirNode>, name: string, path: string): DirNode => {
     let n = map.get(path);
@@ -28,6 +29,21 @@ function buildTree(files: FileEntry[], root: string): DirNode[] {
     return n;
   };
   const childMaps = new Map<string, Map<string, DirNode>>();
+
+  // 先按目录列表建节点, 保证空文件夹也出现在树中
+  for (const d of dirs) {
+    const segs = relPath(d, root).split("/").filter(Boolean);
+    if (segs.length === 0) continue;
+    let map = top;
+    let acc = "";
+    for (const seg of segs) {
+      acc = acc ? `${acc}/${seg}` : seg;
+      const fullDir = `${root.replace(/[\\/]+$/, "")}\\${acc.replace(/\//g, "\\")}`;
+      getOrCreate(map, seg, fullDir);
+      if (!childMaps.has(fullDir)) childMaps.set(fullDir, new Map());
+      map = childMaps.get(fullDir)!;
+    }
+  }
 
   for (const f of files) {
     const segs = relPath(f.path, root).split("/").slice(0, -1);
@@ -111,12 +127,15 @@ function DirItem({ node, depth, onDelete }: { node: DirNode; depth: number; onDe
 export default function Sidebar() {
   const root = useLibraryStore((s) => s.root);
   const files = useLibraryStore((s) => s.files);
+  const dirs = useLibraryStore((s) => s.dirs);
   const selectedDir = useLibraryStore((s) => s.selectedDir);
   const selectDir = useLibraryStore((s) => s.selectDir);
+  const createFolder = useLibraryStore((s) => s.createFolder);
 
   const [confirmTarget, setConfirmTarget] = useState<DirNode | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
-  const tree = useMemo(() => buildTree(files, root ?? ""), [files, root]);
+  const tree = useMemo(() => buildTree(files, dirs, root ?? ""), [files, dirs, root]);
 
   const confirmRemoveDir = async () => {
     if (!confirmTarget) return;
@@ -138,10 +157,28 @@ export default function Sidebar() {
     }
   };
 
+  const confirmCreateRoot = async (name: string) => {
+    setCreateOpen(false);
+    try {
+      await createFolder(name, root ?? undefined);
+    } catch (e) {
+      alert(`新建文件夹失败：${e}`);
+    }
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-ink-800 px-3 py-2.5">
+      <div className="flex items-center justify-between border-b border-ink-800 py-2.5 pl-3 pr-2">
         <span className="text-xs font-semibold tracking-widest text-ink-300">分 类</span>
+        <button
+          onClick={() => setCreateOpen(true)}
+          disabled={!root}
+          title="在棋谱库根目录新建分类文件夹"
+          aria-label="新建根目录文件夹"
+          className="rounded p-0.5 text-xs leading-none text-ink-300 transition-colors hover:bg-ink-700 hover:text-gold-300 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          ＋
+        </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5">
         <button
@@ -175,6 +212,17 @@ export default function Sidebar() {
           confirmText="删除"
           onConfirm={() => void confirmRemoveDir()}
           onCancel={() => setConfirmTarget(null)}
+        />
+      )}
+      {createOpen && (
+        <InputDialog
+          title="新建文件夹"
+          message="将在棋谱库根目录创建顶级分类。"
+          placeholder="请输入文件夹名称"
+          confirmText="创建"
+          hint={'名称不能包含 \\ / : * ? " < > | 等字符。'}
+          onConfirm={(v) => void confirmCreateRoot(v)}
+          onCancel={() => setCreateOpen(false)}
         />
       )}
     </div>

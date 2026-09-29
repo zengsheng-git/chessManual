@@ -3,6 +3,7 @@ import { useLibraryStore } from "../../stores/libraryStore";
 import { useGameStore } from "../../stores/gameStore";
 import { revealInExplorer, deleteGameFile } from "../../lib/ipc";
 import ConfirmDialog from "../common/ConfirmDialog";
+import InputDialog from "../common/InputDialog";
 
 const RENDER_LIMIT = 500;
 
@@ -18,11 +19,13 @@ export default function FileList() {
   const filePath = useGameStore((s) => s.filePath);
   const closeGame = useGameStore((s) => s.closeGame);
   const rescan = useLibraryStore((s) => s.rescan);
+  const createFolder = useLibraryStore((s) => s.createFolder);
   const revealPath = useLibraryStore((s) => s.revealPath);
   const clearReveal = useLibraryStore((s) => s.clearReveal);
 
   const [limit, setLimit] = useState(RENDER_LIMIT);
   const [confirmTarget, setConfirmTarget] = useState<{ path: string; name: string } | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const normDir = selectedDir.replace(/\\/g, "/").replace(/\/+$/, "");
   const q = query.trim().toLowerCase();
@@ -59,6 +62,15 @@ export default function FileList() {
       await rescan();
     } catch (e) {
       alert(`删除失败：${e}`);
+    }
+  };
+
+  const confirmCreate = async (name: string) => {
+    setCreateOpen(false);
+    try {
+      await createFolder(name);
+    } catch (e) {
+      alert(`新建文件夹失败：${e}`);
     }
   };
 
@@ -113,8 +125,22 @@ export default function FileList() {
               </span>
             ) : null}
           </span>
-          <span className="text-ink-400">
-            {visible.length} 个{shown.length < visible.length ? `（已显示 ${shown.length}）` : ""}
+          <span className="flex items-center gap-1.5">
+            <span className="text-ink-400">
+              {visible.length} 个{shown.length < visible.length ? `（已显示 ${shown.length}）` : ""}
+            </span>
+            <button
+              onClick={() => setCreateOpen(true)}
+              title={
+                normDir
+                  ? `在「${normDir.split("/").pop()}」中新建文件夹`
+                  : "在棋谱库根目录新建文件夹"
+              }
+              aria-label="新建文件夹"
+              className="rounded p-0.5 text-[11px] leading-none text-ink-300 transition-colors hover:bg-ink-700 hover:text-gold-300"
+            >
+              ＋📁
+            </button>
           </span>
         </div>
       </div>
@@ -193,6 +219,17 @@ export default function FileList() {
           confirmText="删除"
           onConfirm={() => void confirmRemove()}
           onCancel={() => setConfirmTarget(null)}
+        />
+      )}
+      {createOpen && (
+        <InputDialog
+          title="新建文件夹"
+          message={<>将在「{normDir ? normDir.split("/").pop() : "全部棋谱"}」分类下创建。</>}
+          placeholder="请输入文件夹名称"
+          confirmText="创建"
+          hint={'名称不能包含 \\ / : * ? " < > | 等字符。'}
+          onConfirm={(v) => void confirmCreate(v)}
+          onCancel={() => setCreateOpen(false)}
         />
       )}
     </div>

@@ -31,3 +31,11 @@ export function deleteGameFile(path: string): Promise<void> {
 export function deleteGameDir(path: string): Promise<void> {
   return invoke("delete_game_dir", { path });
 }
+
+export function scanDirs(root: string): Promise<string[]> {
+  return invoke<string[]>("scan_dirs", { root });
+}
+
+export function createFolder(parentPath: string, folderName: string): Promise<string> {
+  return invoke<string>("create_folder", { parentPath, folderName });
+}

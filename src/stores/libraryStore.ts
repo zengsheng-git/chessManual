@@ -1,9 +1,15 @@
 import { create } from "zustand";
-import { scanDir, type FileEntry } from "../lib/ipc";
+import {
+  scanDir,
+  scanDirs,
+  createFolder as createFolderIpc,
+  type FileEntry,
+} from "../lib/ipc";
 
 interface LibraryState {
   root: string | null;
   files: FileEntry[];
+  dirs: string[];
   loading: boolean;
   error: string | null;
   expanded: Record<string, boolean>;
@@ -13,6 +19,7 @@ interface LibraryState {
   revealPath: string | null;
   setRoot: (root: string) => Promise<void>;
   rescan: () => Promise<void>;
+  createFolder: (name: string, parentPath?: string) => Promise<void>;
   toggleDir: (dir: string) => void;
   selectDir: (dir: string) => void;
   setQuery: (q: string) => void;
@@ -25,6 +32,7 @@ export const useLibraryStore = create<LibraryState>()(
   (set, get) => ({
     root: null,
     files: [],
+    dirs: [],
     loading: false,
     error: null,
     expanded: {},
@@ -43,12 +51,25 @@ export const useLibraryStore = create<LibraryState>()(
       if (!root) return;
       set({ loading: true, error: null });
       try {
-        const files = await scanDir(root);
+        const [files, dirs] = await Promise.all([scanDir(root), scanDirs(root)]);
         files.sort((a, b) => a.path.localeCompare(b.path, "zh-CN"));
-        set({ files, loading: false });
+        dirs.sort((a, b) => a.localeCompare(b, "zh-CN"));
+        set({ files, dirs, loading: false });
       } catch (e) {
-        set({ error: String(e), loading: false, files: [] });
+        set({ error: String(e), loading: false, files: [], dirs: [] });
       }
+    },
+
+    // 在指定目录(缺省为当前选中目录, 未选中则为库根目录)下新建文件夹, 成功后选中新目录
+    createFolder: async (name, parentPath) => {
+      const root = get().root;
+      if (!root) throw new Error("尚未打开棋谱库");
+      const clean = name.trim();
+      const parent =
+        parentPath?.trim() || get().selectedDir || root.replace(/[\\/]+$/, "");
+      await createFolderIpc(parent, clean);
+      get().selectDir(`${parent}\\${clean}`);
+      await get().rescan();
     },
 
     toggleDir: (dir) =>

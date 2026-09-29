@@ -230,6 +230,72 @@ fn delete_game_dir(app: AppHandle, path: String) -> Result<(), String> {
     trash::delete(&target).map_err(|e| format!("删除失败：{}", e))
 }
 
+/// 递归收集所有子目录(含空目录), 供侧栏目录树展示
+fn walk_dirs(dir: &Path, depth: u32, out: &mut Vec<String>) -> std::io::Result<()> {
+    if depth > MAX_DEPTH {
+        return Ok(());
+    }
+    let entries = match fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(_) => return Ok(()),
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            out.push(path.to_string_lossy().to_string());
+            walk_dirs(&path, depth + 1, out)?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn scan_dirs(root: String) -> Result<Vec<String>, String> {
+    let root_path = Path::new(&root);
+    if !root_path.is_dir() {
+        return Err(format!("目录不存在：{}", root));
+    }
+    let mut out = Vec::new();
+    walk_dirs(root_path, 0, &mut out).map_err(|e| format!("扫描失败：{}", e))?;
+    Ok(out)
+}
+
+/// 在棋谱库内新建文件夹, 返回新文件夹完整路径
+#[tauri::command]
+fn create_folder(
+    app: AppHandle,
+    parent_path: String,
+    folder_name: String,
+) -> Result<String, String> {
+    let name = folder_name.trim();
+    if name.is_empty() {
+        return Err("文件夹名称不能为空".to_string());
+    }
+    if name.contains(['\\', '/', ':', '*', '?', '"', '<', '>', '|']) {
+        return Err("文件夹名称不能包含 \\ / : * ? \" < > | 等字符".to_string());
+    }
+    let parent = PathBuf::from(&parent_path);
+    if !parent.is_dir() {
+        return Err(format!("目标文件夹不存在：{}", parent_path));
+    }
+    let root = library_dir_impl(&app)?;
+    let root = root.canonicalize().unwrap_or(root);
+    let parent = parent.canonicalize().map_err(|e| format!("路径无效：{}", e))?;
+    if !parent.starts_with(&root) {
+        return Err("不允许在棋谱库之外新建文件夹".to_string());
+    }
+    let target = parent.join(name);
+    if target.symlink_metadata().is_ok() {
+        return Err(format!("同名文件或文件夹已存在：{}", name));
+    }
+    fs::create_dir(&target).map_err(|e| format!("创建文件夹失败：{}", e))?;
+    let created = target.to_string_lossy().to_string();
+    Ok(match created.strip_prefix(r"\\?\") {
+        Some(s) => s.to_string(),
+        None => created,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -260,6 +326,8 @@ pub fn run() {
             reveal_in_explorer,
             delete_game_file,
             delete_game_dir,
+            scan_dirs,
+            create_folder,
             capture::list_windows,
             recorder::start_recording,
             recorder::stop_recording,
