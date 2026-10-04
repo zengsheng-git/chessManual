@@ -18,6 +18,7 @@
 - 多种导航方式：按钮、滚轮、快捷键逐手翻看，↑ / ↓ 在兄弟变例间切换
 - 分歧选择：走到有多个变招的局面时，右侧信息栏弹出选择框，悬停选项可在棋盘上实时预览落子位置（青色虚线圈 + 半透明棋子），方便对比后再选择
 - 步注气泡与注解面板
+- 软件检测（仅 Windows）：用内置 Pikafish 引擎逐手对照主线着法，统计首选/等值吻合率、每步损失（ACPL）与波动，并分开局段/中残局段展示，评估对局是否存在软件生成特征（指标仅供参考）
 - 日间 / 夜间主题切换
 
 ### 录制棋谱（仅 Windows）
@@ -74,9 +75,12 @@ src-tauri/
     detect.rs             # 棋子检测图像处理
     yolo.rs               # ONNX Runtime 推理
     recorder.rs           # 录制会话管理
+    engine.rs             # Pikafish UCI 引擎子进程封装
+    analysis.rs           # 软件棋检测分析会话
   resources/
     games/                # 内置棋谱库（打包资源）
     libs/                 # onnxruntime.dll 与 YOLO 模型
+    libs/pikafish/        # Pikafish 引擎与 NNUE 权重（不入库，获取方式见下文）
 ```
 
 ## 快速开始
@@ -106,3 +110,12 @@ npm run tauri build  # 打包，产出 MSI 安装包与 NSIS setup.exe
 
 - 开发模式：直接读写源码树 `src-tauri/resources/games`，便于调试内置棋谱
 - 正式版：`%APPDATA%\com.chessmanual.app\games`，首次启动从安装包内资源播种；用户自录与导入的棋谱也保存在这里，升级重装不会丢失
+
+## Pikafish 引擎资源（软件检测）
+
+软件检测以独立子进程方式运行 Pikafish（GPL-3.0，经 UCI 协议通信），需要以下两个文件，体积较大（约 47MB）不入 git：
+
+- `src-tauri/resources/libs/pikafish/pikafish-windows.exe`
+- `src-tauri/resources/libs/pikafish/pikafish.nnue`
+
+获取方式：从本机其他项目（如 `residual-deduction/libs/pikafish/`）复制，或从 Pikafish 官方 GitHub Releases 下载对应平台的引擎与 NNUE 权重。文件缺失时应用正常启动，仅"软件检测"不可用（点击后提示引擎未初始化）。

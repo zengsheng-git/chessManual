@@ -14,6 +14,8 @@
   --color-gold-300: var(--c-gold-300);
   --color-gold-400: var(--c-gold-400);
   --color-gold-500: var(--c-gold-500);
+  --color-orange-300: var(--c-orange-300);
+  --color-orange-400: var(--c-orange-400);
   --color-verm-400: var(--c-verm-400);
   --color-verm-500: var(--c-verm-500);
   --color-verm-600: var(--c-verm-600);
@@ -32,6 +34,8 @@
   --c-gold-300: #7e5e0e;
   --c-gold-400: #9a7410;
   --c-gold-500: #b08a2e;
+  --c-orange-300: #a55a0e;
+  --c-orange-400: #bb6a16;
   --c-verm-400: #c24832;
   --c-verm-500: #b23a24;
   --c-verm-600: #a03020;
@@ -51,6 +55,8 @@
   --c-gold-300: #e8c37a;
   --c-gold-400: #d9a648;
   --c-gold-500: #c08a2e;
+  --c-orange-300: #f0a35e;
+  --c-orange-400: #e6873a;
   --c-verm-400: #e0604a;
   --c-verm-500: #c2402a;
   --c-verm-600: #a03020;

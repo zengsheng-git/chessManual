@@ -8,6 +8,7 @@ import GameInfo from "./components/library/GameInfo";
 import CommentPanel from "./components/board/CommentPanel";
 import VariationPicker, { type MovePreview } from "./components/board/VariationPicker";
 import RecordPanel from "./components/record/RecordPanel";
+import AnalysisPanel from "./components/analysis/AnalysisPanel";
 import { isTauriEnv } from "./lib/ipc";
 import { useLibraryStore } from "./stores/libraryStore";
 import { currentFen, selectNode, useGameStore } from "./stores/gameStore";
@@ -63,6 +64,7 @@ export default function App() {
     (s) => s.phase === "recording" || s.phase === "locating",
   );
   const [recordOpen, setRecordOpen] = useState(false);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
   const [previewMove, setPreviewMove] = useState<MovePreview | null>(null);
 
   const [theme, setTheme] = useState<"light" | "dark">(() =>
@@ -196,6 +198,13 @@ export default function App() {
             )}
             录制棋谱
           </ControlButton>
+          <ControlButton
+            onClick={() => setAnalysisOpen(true)}
+            disabled={!hasGame}
+            title="用 Pikafish 引擎逐手对照分析，评估对局是否软件生成（仅供参考）"
+          >
+            软件检测
+          </ControlButton>
           <ControlButton onClick={toggleTheme} title="切换日间/夜间模式">
             {theme === "light" ? "🌙 夜间" : "☀️ 日间"}
           </ControlButton>
@@ -310,6 +319,7 @@ export default function App() {
       </div>
 
       {recordOpen && <RecordPanel onClose={() => setRecordOpen(false)} />}
+      {analysisOpen && <AnalysisPanel onClose={() => setAnalysisOpen(false)} />}
     </div>
   );
 }

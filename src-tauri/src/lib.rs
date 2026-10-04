@@ -1,5 +1,7 @@
+mod analysis;
 mod capture;
 mod detect;
+mod engine;
 mod recorder;
 mod yolo;
 
@@ -296,6 +298,21 @@ fn create_folder(
     })
 }
 
+/// 解析引擎资源路径: 开发版优先取源码树(target 里的资源副本只在 dev 启动时同步,
+/// 运行中途新增的文件取不到), 源码树没有再回退资源目录; 打包版直接取安装资源目录
+#[cfg(target_os = "windows")]
+fn engine_resource_path(app: &AppHandle, rel: &str) -> Result<PathBuf, String> {
+    if cfg!(debug_assertions) {
+        let src = Path::new(env!("CARGO_MANIFEST_DIR")).join(rel);
+        if src.is_file() {
+            return Ok(src);
+        }
+    }
+    app.path()
+        .resolve(rel, tauri::path::BaseDirectory::Resource)
+        .map_err(|e| format!("解析 {rel} 失败：{e}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -317,6 +334,18 @@ pub fn run() {
                     }
                     (Err(e), _) | (_, Err(e)) => eprintln!("[chessManual] 资源路径解析失败：{e}"),
                 }
+
+                // Pikafish 引擎与 NNUE 权重(软件棋检测用), 缺失时分析命令报错提示
+                let exe = engine_resource_path(app.handle(), "resources/libs/pikafish/pikafish-windows.exe");
+                let nnue = engine_resource_path(app.handle(), "resources/libs/pikafish/pikafish.nnue");
+                match (exe, nnue) {
+                    (Ok(exe), Ok(nnue)) => {
+                        if let Err(e) = engine::init(&exe, &nnue) {
+                            eprintln!("[chessManual] 引擎初始化失败：{e}");
+                        }
+                    }
+                    (Err(e), _) | (_, Err(e)) => eprintln!("[chessManual] 引擎资源路径解析失败：{e}"),
+                }
             }
             Ok(())
         })
@@ -331,6 +360,8 @@ pub fn run() {
             capture::list_windows,
             recorder::start_recording,
             recorder::stop_recording,
+            analysis::analyze_game,
+            analysis::stop_analysis,
             save_pgn,
             library_dir
         ])
