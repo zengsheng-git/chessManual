@@ -28,6 +28,3 @@ dist-ssr
 
 # 运行时生成的用户棋谱（dev 模式录棋保存目录）
 src-tauri/resources/games/自定义/
-
-# Pikafish 引擎二进制与 NNUE 权重（体积大，不入库；获取方式见 README）
-src-tauri/resources/libs/pikafish/

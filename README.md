@@ -80,7 +80,7 @@ src-tauri/
   resources/
     games/                # 内置棋谱库（打包资源）
     libs/                 # onnxruntime.dll 与 YOLO 模型
-    libs/pikafish/        # Pikafish 引擎与 NNUE 权重（不入库，获取方式见下文）
+    libs/pikafish/        # Pikafish 引擎与 NNUE 权重（随仓库分发，约 47MB）
 ```
 
 ## 快速开始
@@ -113,9 +113,9 @@ npm run tauri build  # 打包，产出 MSI 安装包与 NSIS setup.exe
 
 ## Pikafish 引擎资源（软件检测）
 
-软件检测以独立子进程方式运行 Pikafish（GPL-3.0，经 UCI 协议通信），需要以下两个文件，体积较大（约 47MB）不入 git：
+软件检测以独立子进程方式运行 Pikafish（GPL-3.0，经 UCI 协议通信），引擎与 NNUE 权重直接随仓库分发（约 47MB），克隆后即可使用：
 
 - `src-tauri/resources/libs/pikafish/pikafish-windows.exe`
 - `src-tauri/resources/libs/pikafish/pikafish.nnue`
 
-获取方式：从本机其他项目（如 `residual-deduction/libs/pikafish/`）复制，或从 Pikafish 官方 GitHub Releases 下载对应平台的引擎与 NNUE 权重。文件缺失时应用正常启动，仅"软件检测"不可用（点击后提示引擎未初始化）。
+文件缺失时应用正常启动，仅"软件检测"不可用（点击后提示引擎未初始化）；此时可从 Pikafish 官方 GitHub Releases 下载对应平台的引擎与 NNUE 权重补齐。
