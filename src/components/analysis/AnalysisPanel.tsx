@@ -1,5 +1,13 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { collectMainlinePlies } from "../../lib/analysis/plies";
+import {
+  clampField,
+  DEFAULT_BANDS,
+  loadBands,
+  saveBands,
+  type Band,
+  type BandPair,
+} from "../../lib/analysis/bands";
 import {
   initAnalysisListeners,
   useAnalysisStore,
@@ -31,32 +39,166 @@ function kindCls(kind: PlyReport["kind"]): string {
       : "bg-verm-500/15 text-verm-400";
 }
 
-// 分档阈值(经验默认值, 未经数据校准; 同档内条件须同时满足, 两条路径任一命中即升级):
+// 分档阈值可由用户调整（默认值与 localStorage 持久化见 lib/analysis/bands.ts;
+// 同档内条件须同时满足, 两条路径任一命中即升级）:
 // 路径一(纯软件特征): 等值吻合率 / 平均损失(厘) / 损失波动(标准差,厘) —— 又准又稳;
 //   波动是必要条件, 人类即使吻合率冲高也会有失误尖峰把波动抬起来
 // 路径二(人机混用特征): 关键手(唯一明显好棋局面)几乎从不失手 —— 整体起伏大也不漏判
-const BAND_STRONG = { ev: 0.9, acpl: 30, stddev: 50, criticals: 6, criticalRate: 0.95 };
-const BAND_WEAK = { ev: 0.75, acpl: 60, stddev: 90, criticals: 4, criticalRate: 0.85 };
 
-/** 判定条件说明（阈值与 statsVerdict 共用同一组常量，保持同步） */
-function VerdictRules() {
+/** 阈值输入框: 本地文本态, 失焦/回车提交并收敛到合法范围, 非法输入还原 */
+function BandInput({
+  value,
+  min,
+  max,
+  onCommit,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  onCommit: (v: number) => void;
+}) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => setText(String(value)), [value]);
+  const commit = () => {
+    const v = Number(text);
+    if (text.trim() !== "" && Number.isFinite(v)) {
+      onCommit(Math.min(max, Math.max(min, v)));
+    } else {
+      setText(String(value));
+    }
+  };
+  return (
+    <input
+      value={text}
+      inputMode="decimal"
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+      className="w-12 rounded border border-ink-600 bg-ink-900 px-1 py-0.5 text-center text-[10px] text-ink-100 focus:border-gold-500/60 focus:outline-none"
+    />
+  );
+}
+
+/** 判定条件说明 + 可展开的阈值编辑区（改动立即按新标准重新分档并持久化） */
+function VerdictRules({
+  bands,
+  onChange,
+  onReset,
+}: {
+  bands: BandPair;
+  onChange: (next: BandPair) => void;
+  onReset: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const setField = (side: "strong" | "weak", field: keyof Band, value: number) =>
+    onChange({ ...bands, [side]: { ...bands[side], [field]: value } });
+
   return (
     <div className="mb-2 rounded-md border border-ink-700 bg-ink-800/60 px-2.5 py-2 text-[10px] leading-relaxed text-ink-400">
-      <div className="mb-1 font-semibold text-ink-300">判定依据（同档各条件须同时满足，两条路径任一命中即达档；仅供参考）</div>
-      <div className="text-verm-400">软件特征明显</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="font-semibold text-ink-300">判定依据（同档各条件须同时满足，两条路径任一命中即达档；仅供参考）</div>
+        <button
+          onClick={() => setEditing((v) => !v)}
+          className="shrink-0 rounded border border-ink-600 px-1.5 py-0.5 text-[10px] text-ink-300 transition-colors hover:border-gold-500/60 hover:text-gold-300"
+        >
+          {editing ? "收起" : "调整标准"}
+        </button>
+      </div>
+      <div className="mt-1 text-verm-400">软件特征明显</div>
       <div>
-        ① 等值吻合率 ≥{pctI(BAND_STRONG.ev)} 且 平均损失 ≤{BAND_STRONG.acpl} 厘 且 损失波动 ≤{BAND_STRONG.stddev}
+        ① 等值吻合率 ≥{pctI(bands.strong.ev)} 且 平均损失 ≤{bands.strong.acpl} 厘 且 损失波动 ≤{bands.strong.stddev}
         （又准又稳）
       </div>
       <div>
-        ② 关键手 ≥{BAND_STRONG.criticals} 手且命中率 ≥{pctI(BAND_STRONG.criticalRate)}（唯一好棋局面从不失手，人机混用特征）
+        ② 关键手 ≥{bands.strong.criticals} 手且命中率 ≥{pctI(bands.strong.criticalRate)}（唯一好棋局面从不失手，人机混用特征）
       </div>
       <div className="mt-1 text-orange-300">有一定软件特征</div>
       <div>
-        ① 等值吻合率 ≥{pctI(BAND_WEAK.ev)} 且 平均损失 ≤{BAND_WEAK.acpl} 厘 且 损失波动 ≤{BAND_WEAK.stddev}
+        ① 等值吻合率 ≥{pctI(bands.weak.ev)} 且 平均损失 ≤{bands.weak.acpl} 厘 且 损失波动 ≤{bands.weak.stddev}
       </div>
-      <div>② 关键手 ≥{BAND_WEAK.criticals} 手且命中率 ≥{pctI(BAND_WEAK.criticalRate)}</div>
+      <div>② 关键手 ≥{bands.weak.criticals} 手且命中率 ≥{pctI(bands.weak.criticalRate)}</div>
       <div className="mt-1">均未达到 → 未见明显特征。单局结论仅供参考，建议对同一对手多局对比。</div>
+
+      {editing && (
+        <div className="mt-2 space-y-1.5 border-t border-ink-700 pt-2">
+          <table className="w-full">
+            <thead>
+              <tr className="text-ink-400">
+                <th className="pr-1 text-left font-normal">档位</th>
+                <th className="px-0.5 font-normal">等值吻合≥%</th>
+                <th className="px-0.5 font-normal">损失≤厘</th>
+                <th className="px-0.5 font-normal">波动≤厘</th>
+                <th className="px-0.5 font-normal">关键手≥</th>
+                <th className="px-0.5 font-normal">命中≥%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(["strong", "weak"] as const).map((side) => {
+                const b = bands[side];
+                return (
+                  <tr key={side}>
+                    <td className={`pr-1 ${side === "strong" ? "text-verm-400" : "text-orange-300"}`}>
+                      {side === "strong" ? "明显" : "可疑"}
+                    </td>
+                    <td className="px-0.5 py-0.5">
+                      <BandInput
+                        value={Math.round(b.ev * 100)}
+                        min={0}
+                        max={100}
+                        onCommit={(v) => setField(side, "ev", clampField("ev", v / 100))}
+                      />
+                    </td>
+                    <td className="px-0.5 py-0.5">
+                      <BandInput
+                        value={b.acpl}
+                        min={1}
+                        max={10_000}
+                        onCommit={(v) => setField(side, "acpl", clampField("acpl", v))}
+                      />
+                    </td>
+                    <td className="px-0.5 py-0.5">
+                      <BandInput
+                        value={b.stddev}
+                        min={0}
+                        max={10_000}
+                        onCommit={(v) => setField(side, "stddev", clampField("stddev", v))}
+                      />
+                    </td>
+                    <td className="px-0.5 py-0.5">
+                      <BandInput
+                        value={b.criticals}
+                        min={0}
+                        max={9_999}
+                        onCommit={(v) => setField(side, "criticals", clampField("criticals", Math.round(v)))}
+                      />
+                    </td>
+                    <td className="px-0.5 py-0.5">
+                      <BandInput
+                        value={Math.round(b.criticalRate * 100)}
+                        min={0}
+                        max={100}
+                        onCommit={(v) => setField(side, "criticalRate", clampField("criticalRate", v / 100))}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div className="flex items-center justify-between gap-2">
+            <span>改完立即重新分档（无需重跑引擎），保存在本机。</span>
+            <button
+              onClick={onReset}
+              className="shrink-0 rounded border border-ink-600 px-1.5 py-0.5 text-ink-300 transition-colors hover:border-gold-500/60 hover:text-gold-300"
+            >
+              恢复默认
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="mt-1">
         卡片数值颜色：<span className="text-verm-400">红</span> = 达到"明显"档阈值，<span className="text-orange-300">橙</span> = 达到"可疑"档阈值；单项达标不代表结论，仍按上述组合判定。
       </div>
@@ -65,18 +207,18 @@ function VerdictRules() {
 }
 
 /** 分侧指标的分档（仅供参考，不能单独作为结论） */
-function statsVerdict(stats: PhaseStats): { label: string; cls: string } {
+function statsVerdict(stats: PhaseStats, bands: BandPair): { label: string; cls: string } {
   if (stats.plies === 0) return { label: "—", cls: "text-ink-400" };
   const criticalRate = stats.criticals > 0 ? stats.critical_hits / stats.criticals : 0;
   const pureEngine =
-    stats.ev_rate >= BAND_STRONG.ev && stats.acpl <= BAND_STRONG.acpl && stats.stddev <= BAND_STRONG.stddev;
-  const criticalPerfect = stats.criticals >= BAND_STRONG.criticals && criticalRate >= BAND_STRONG.criticalRate;
+    stats.ev_rate >= bands.strong.ev && stats.acpl <= bands.strong.acpl && stats.stddev <= bands.strong.stddev;
+  const criticalPerfect = stats.criticals >= bands.strong.criticals && criticalRate >= bands.strong.criticalRate;
   if (pureEngine || criticalPerfect) {
     return { label: "软件特征明显", cls: "text-verm-400" };
   }
   const somewhatEngine =
-    stats.ev_rate >= BAND_WEAK.ev && stats.acpl <= BAND_WEAK.acpl && stats.stddev <= BAND_WEAK.stddev;
-  const criticalMostly = stats.criticals >= BAND_WEAK.criticals && criticalRate >= BAND_WEAK.criticalRate;
+    stats.ev_rate >= bands.weak.ev && stats.acpl <= bands.weak.acpl && stats.stddev <= bands.weak.stddev;
+  const criticalMostly = stats.criticals >= bands.weak.criticals && criticalRate >= bands.weak.criticalRate;
   if (somewhatEngine || criticalMostly) {
     return { label: "有一定软件特征", cls: "text-orange-300" };
   }
@@ -111,15 +253,25 @@ function levelCls(strong: boolean, weak: boolean): string {
 }
 
 /** 单侧统计卡片: 结论置顶, 指标对齐排列 */
-function SideCard({ label, labelCls, stats }: { label: string; labelCls: string; stats: PhaseStats }) {
-  const verdict = statsVerdict(stats);
+function SideCard({
+  label,
+  labelCls,
+  stats,
+  bands,
+}: {
+  label: string;
+  labelCls: string;
+  stats: PhaseStats;
+  bands: BandPair;
+}) {
+  const verdict = statsVerdict(stats, bands);
   const criticalRate = stats.criticals > 0 ? stats.critical_hits / stats.criticals : 0;
-  const evCls = levelCls(stats.ev_rate >= BAND_STRONG.ev, stats.ev_rate >= BAND_WEAK.ev);
-  const acplCls = levelCls(stats.acpl <= BAND_STRONG.acpl, stats.acpl <= BAND_WEAK.acpl);
-  const stdCls = levelCls(stats.stddev <= BAND_STRONG.stddev, stats.stddev <= BAND_WEAK.stddev);
+  const evCls = levelCls(stats.ev_rate >= bands.strong.ev, stats.ev_rate >= bands.weak.ev);
+  const acplCls = levelCls(stats.acpl <= bands.strong.acpl, stats.acpl <= bands.weak.acpl);
+  const stdCls = levelCls(stats.stddev <= bands.strong.stddev, stats.stddev <= bands.weak.stddev);
   const critCls = levelCls(
-    stats.criticals >= BAND_STRONG.criticals && criticalRate >= BAND_STRONG.criticalRate,
-    stats.criticals >= BAND_WEAK.criticals && criticalRate >= BAND_WEAK.criticalRate,
+    stats.criticals >= bands.strong.criticals && criticalRate >= bands.strong.criticalRate,
+    stats.criticals >= bands.weak.criticals && criticalRate >= bands.weak.criticalRate,
   );
   return (
     <div className="rounded-md border border-ink-700 bg-ink-800 px-3 py-2.5">
@@ -163,6 +315,13 @@ export default function AnalysisPanel({ onClose }: { onClose: () => void }) {
 
   const game = useGameStore((s) => s.game);
   const fileName = useGameStore((s) => s.fileName);
+
+  // 分档阈值: localStorage 初值, 改动立即生效并持久化(对已有结果重新分档, 无需重跑引擎)
+  const [bands, setBands] = useState<BandPair>(loadBands);
+  const updateBands = (next: BandPair) => {
+    setBands(next);
+    saveBands(next);
+  };
 
   // 打开面板时注册事件订阅，关闭时清理
   useEffect(() => initAnalysisListeners(), []);
@@ -319,10 +478,10 @@ export default function AnalysisPanel({ onClose }: { onClose: () => void }) {
             {result && (
               <>
                 <div className="mb-2 grid grid-cols-2 gap-2">
-                  <SideCard label="红方" labelCls="text-verm-400" stats={result.red} />
-                  <SideCard label="黑方" labelCls="text-ink-100" stats={result.black} />
+                  <SideCard label="红方" labelCls="text-verm-400" stats={result.red} bands={bands} />
+                  <SideCard label="黑方" labelCls="text-ink-100" stats={result.black} bands={bands} />
                 </div>
-                <VerdictRules />
+                <VerdictRules bands={bands} onChange={updateBands} onReset={() => updateBands(DEFAULT_BANDS)} />
                 <p className="mb-2 text-[10px] leading-relaxed text-ink-400">
                   耗时 {(result.elapsed_ms / 1000).toFixed(1)} 秒
                 </p>
