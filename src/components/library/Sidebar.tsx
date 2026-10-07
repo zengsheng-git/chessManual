@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useLibraryStore } from "../../stores/libraryStore";
 import { useGameStore } from "../../stores/gameStore";
-import { deleteGameDir, type FileEntry } from "../../lib/ipc";
+import { deleteGameDir, renameGameDir, type FileEntry } from "../../lib/ipc";
 import ConfirmDialog from "../common/ConfirmDialog";
 import InputDialog from "../common/InputDialog";
 
@@ -69,7 +69,17 @@ function buildTree(files: FileEntry[], dirs: string[], root: string): DirNode[] 
   return attach(Array.from(top.values()).sort((a, b) => a.name.localeCompare(b.name, "zh-CN")));
 }
 
-function DirItem({ node, depth, onDelete }: { node: DirNode; depth: number; onDelete: (node: DirNode) => void }) {
+function DirItem({
+  node,
+  depth,
+  onDelete,
+  onRename,
+}: {
+  node: DirNode;
+  depth: number;
+  onDelete: (node: DirNode) => void;
+  onRename: (node: DirNode) => void;
+}) {
   const expanded = useLibraryStore((s) => !!s.expanded[node.path]);
   const selected = useLibraryStore((s) => s.selectedDir === node.path);
   const toggleDir = useLibraryStore((s) => s.toggleDir);
@@ -105,6 +115,14 @@ function DirItem({ node, depth, onDelete }: { node: DirNode; depth: number; onDe
           </span>
         </button>
         <button
+          onClick={() => onRename(node)}
+          title="重命名文件夹"
+          aria-label={`重命名文件夹 ${node.name}`}
+          className="ml-0.5 shrink-0 rounded p-1 text-xs leading-none text-ink-400 opacity-0 transition-opacity hover:bg-ink-700 hover:text-gold-300 focus-visible:opacity-100 group-hover:opacity-100"
+        >
+          ✏️
+        </button>
+        <button
           onClick={() => onDelete(node)}
           title="删除文件夹（移入回收站）"
           aria-label={`删除文件夹 ${node.name}`}
@@ -116,7 +134,7 @@ function DirItem({ node, depth, onDelete }: { node: DirNode; depth: number; onDe
       {expanded && (
         <div>
           {node.children.map((c) => (
-            <DirItem key={c.path} node={c} depth={depth + 1} onDelete={onDelete} />
+            <DirItem key={c.path} node={c} depth={depth + 1} onDelete={onDelete} onRename={onRename} />
           ))}
         </div>
       )}
@@ -134,6 +152,7 @@ export default function Sidebar() {
 
   const [confirmTarget, setConfirmTarget] = useState<DirNode | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<DirNode | null>(null);
 
   const tree = useMemo(() => buildTree(files, dirs, root ?? ""), [files, dirs, root]);
 
@@ -154,6 +173,29 @@ export default function Sidebar() {
       await lib.rescan();
     } catch (e) {
       alert(`删除失败：${e}`);
+    }
+  };
+
+  // 重命名成功后迁移库内引用的目录路径与打开中棋谱的路径, 再刷新树
+  const confirmRenameDir = async (newName: string) => {
+    const node = renameTarget;
+    setRenameTarget(null);
+    if (!node) return;
+    try {
+      const newPath = await renameGameDir(node.path, newName);
+      const oldNorm = node.path.replace(/\\/g, "/").replace(/\/+$/, "");
+      const newNorm = newPath.replace(/\\/g, "/").replace(/\/+$/, "");
+      const game = useGameStore.getState();
+      if (game.filePath) {
+        const fp = game.filePath.replace(/\\/g, "/");
+        if (fp.startsWith(oldNorm + "/")) {
+          game.setFileInfo(newNorm + fp.slice(oldNorm.length), game.fileName ?? "");
+        }
+      }
+      useLibraryStore.getState().migrateDir(node.path, newPath);
+      await useLibraryStore.getState().rescan();
+    } catch (e) {
+      alert(`重命名失败：${e}`);
     }
   };
 
@@ -197,7 +239,7 @@ export default function Sidebar() {
           </span>
         </button>
         {tree.map((n) => (
-          <DirItem key={n.path} node={n} depth={0} onDelete={setConfirmTarget} />
+          <DirItem key={n.path} node={n} depth={0} onDelete={setConfirmTarget} onRename={setRenameTarget} />
         ))}
       </div>
       {confirmTarget && (
@@ -223,6 +265,22 @@ export default function Sidebar() {
           hint={'名称不能包含 \\ / : * ? " < > | 等字符。'}
           onConfirm={(v) => void confirmCreateRoot(v)}
           onCancel={() => setCreateOpen(false)}
+        />
+      )}
+      {renameTarget && (
+        <InputDialog
+          title="重命名文件夹"
+          message={
+            <span title={renameTarget.path}>
+              将「{renameTarget.name}」（含 {renameTarget.count} 盘棋谱）改名为：
+            </span>
+          }
+          defaultValue={renameTarget.name}
+          placeholder="请输入新名称"
+          confirmText="重命名"
+          hint={'名称不能包含 \\ / : * ? " < > | 等字符。'}
+          onConfirm={(v) => void confirmRenameDir(v)}
+          onCancel={() => setRenameTarget(null)}
         />
       )}
     </div>

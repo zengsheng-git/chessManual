@@ -232,6 +232,103 @@ fn delete_game_dir(app: AppHandle, path: String) -> Result<(), String> {
     trash::delete(&target).map_err(|e| format!("删除失败：{}", e))
 }
 
+/// 校验文件/文件夹新名称: 去首尾空白、禁空名/非法字符/结尾点号(Windows 会静默吞掉结尾点号)
+fn validate_name(new_name: &str) -> Result<String, String> {
+    let name = new_name.trim();
+    if name.is_empty() {
+        return Err("名称不能为空".to_string());
+    }
+    if name.contains(['\\', '/', ':', '*', '?', '"', '<', '>', '|']) {
+        return Err("名称不能包含 \\ / : * ? \" < > | 等字符".to_string());
+    }
+    if name.ends_with('.') {
+        return Err("名称不能以点号结尾".to_string());
+    }
+    Ok(name.to_string())
+}
+
+/// 大小写不敏感地去掉名称末尾与 ext 相同的扩展名, 避免重命名后出现 xxx.pgn.pgn
+fn strip_ext_ci<'a>(name: &'a str, ext: &str) -> &'a str {
+    if let Some(pos) = name.rfind('.') {
+        if name[pos + 1..].eq_ignore_ascii_case(ext) {
+            return &name[..pos];
+        }
+    }
+    name
+}
+
+/// 两个已存在路径是否指向同一文件(用于放行仅大小写不同的重命名)
+fn same_existing(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(x), Ok(y)) => x == y,
+        _ => false,
+    }
+}
+
+/// 重命名棋谱文件(保留原扩展名), 返回新完整路径; 仅允许棋谱库内的 xqf/pgn
+#[tauri::command]
+fn rename_game_file(app: AppHandle, path: String, new_name: String) -> Result<String, String> {
+    let p = PathBuf::from(&path);
+    if !p.is_file() {
+        return Err(format!("文件不存在：{}", path));
+    }
+    ensure_in_library(&app, &p)?;
+    let ext = p
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_string())
+        .ok_or_else(|| "只允许重命名棋谱文件（xqf/pgn）".to_string())?;
+    match ext.to_ascii_lowercase().as_str() {
+        "xqf" | "pgn" => {}
+        _ => return Err("只允许重命名棋谱文件（xqf/pgn）".to_string()),
+    }
+    let mut base = validate_name(&new_name)?;
+    base = strip_ext_ci(&base, &ext).to_string();
+    if base.is_empty() {
+        return Err("名称不能为空".to_string());
+    }
+    let new_file_name = format!("{base}.{ext}");
+    let target = p.with_file_name(&new_file_name);
+    if target.symlink_metadata().is_ok() && !same_existing(&p, &target) {
+        return Err(format!("同名文件已存在：{}", new_file_name));
+    }
+    fs::rename(&p, &target).map_err(|e| format!("重命名失败：{}", e))?;
+    let renamed = target.to_string_lossy().to_string();
+    Ok(match renamed.strip_prefix(r"\\?") {
+        Some(s) => s.to_string(),
+        None => renamed,
+    })
+}
+
+/// 重命名棋谱文件夹, 返回新完整路径; 仅允许棋谱库内的子目录(不含根目录)
+#[tauri::command]
+fn rename_game_dir(app: AppHandle, path: String, new_name: String) -> Result<String, String> {
+    let p = PathBuf::from(&path);
+    if !p.is_dir() {
+        return Err(format!("文件夹不存在：{}", path));
+    }
+    let root = library_dir_impl(&app)?;
+    let root = root.canonicalize().unwrap_or(root);
+    let target_check = p.canonicalize().map_err(|e| format!("路径无效：{}", e))?;
+    if target_check == root {
+        return Err("不能重命名棋谱库根目录".to_string());
+    }
+    if !target_check.starts_with(&root) {
+        return Err("不允许重命名棋谱库之外的文件夹".to_string());
+    }
+    let name = validate_name(&new_name)?;
+    let target = p.with_file_name(&name);
+    if target.symlink_metadata().is_ok() && !same_existing(&p, &target) {
+        return Err(format!("同名文件夹已存在：{}", name));
+    }
+    fs::rename(&p, &target).map_err(|e| format!("重命名失败：{}", e))?;
+    let renamed = target.to_string_lossy().to_string();
+    Ok(match renamed.strip_prefix(r"\\?") {
+        Some(s) => s.to_string(),
+        None => renamed,
+    })
+}
+
 /// 递归收集所有子目录(含空目录), 供侧栏目录树展示
 fn walk_dirs(dir: &Path, depth: u32, out: &mut Vec<String>) -> std::io::Result<()> {
     if depth > MAX_DEPTH {
@@ -269,13 +366,7 @@ fn create_folder(
     parent_path: String,
     folder_name: String,
 ) -> Result<String, String> {
-    let name = folder_name.trim();
-    if name.is_empty() {
-        return Err("文件夹名称不能为空".to_string());
-    }
-    if name.contains(['\\', '/', ':', '*', '?', '"', '<', '>', '|']) {
-        return Err("文件夹名称不能包含 \\ / : * ? \" < > | 等字符".to_string());
-    }
+    let name = validate_name(&folder_name)?;
     let parent = PathBuf::from(&parent_path);
     if !parent.is_dir() {
         return Err(format!("目标文件夹不存在：{}", parent_path));
@@ -286,7 +377,7 @@ fn create_folder(
     if !parent.starts_with(&root) {
         return Err("不允许在棋谱库之外新建文件夹".to_string());
     }
-    let target = parent.join(name);
+    let target = parent.join(&name);
     if target.symlink_metadata().is_ok() {
         return Err(format!("同名文件或文件夹已存在：{}", name));
     }
@@ -355,6 +446,8 @@ pub fn run() {
             reveal_in_explorer,
             delete_game_file,
             delete_game_dir,
+            rename_game_file,
+            rename_game_dir,
             scan_dirs,
             create_folder,
             capture::list_windows,

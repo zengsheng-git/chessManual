@@ -26,6 +26,10 @@ interface LibraryState {
   setCurrentPath: (p: string | null) => void;
   revealTo: (path: string) => Promise<void>;
   clearReveal: () => void;
+  /** 棋谱文件重命名后，同步库内记录的"最近打开/定位"路径 */
+  migrateFile: (oldPath: string, newPath: string) => void;
+  /** 文件夹重命名后，迁移库内引用该目录的路径（选中目录/展开状态/最近打开/定位标记） */
+  migrateDir: (oldDir: string, newDir: string) => void;
 }
 
 export const useLibraryStore = create<LibraryState>()(
@@ -102,5 +106,35 @@ export const useLibraryStore = create<LibraryState>()(
     },
 
     clearReveal: () => set({ revealPath: null }),
+
+    migrateFile: (oldPath, newPath) => {
+      const norm = (p: string | null) => p?.replace(/\\/g, "/") ?? null;
+      const old = norm(oldPath);
+      set((s) => ({
+        currentPath: norm(s.currentPath) === old ? newPath : s.currentPath,
+        revealPath: norm(s.revealPath) === old ? newPath : s.revealPath,
+      }));
+    },
+
+    migrateDir: (oldDir, newDir) => {
+      const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
+      const old = norm(oldDir);
+      const remap = (p: string): string => {
+        const n = norm(p);
+        if (n === old) return newDir;
+        if (n.startsWith(old + "/")) return (newDir + n.slice(old.length)).replace(/\//g, "\\");
+        return p;
+      };
+      set((s) => {
+        const expanded: Record<string, boolean> = {};
+        for (const [k, v] of Object.entries(s.expanded)) expanded[remap(k)] = v;
+        return {
+          selectedDir: s.selectedDir ? remap(s.selectedDir) : s.selectedDir,
+          expanded,
+          currentPath: s.currentPath ? remap(s.currentPath) : s.currentPath,
+          revealPath: s.revealPath ? remap(s.revealPath) : s.revealPath,
+        };
+      });
+    },
   }),
 );

@@ -32,6 +32,16 @@ export function deleteGameDir(path: string): Promise<void> {
   return invoke("delete_game_dir", { path });
 }
 
+/** 重命名棋谱文件（后端保留原扩展名），返回新完整路径 */
+export function renameGameFile(path: string, newName: string): Promise<string> {
+  return invoke<string>("rename_game_file", { path, newName });
+}
+
+/** 重命名棋谱文件夹，返回新完整路径 */
+export function renameGameDir(path: string, newName: string): Promise<string> {
+  return invoke<string>("rename_game_dir", { path, newName });
+}
+
 export function scanDirs(root: string): Promise<string[]> {
   return invoke<string[]>("scan_dirs", { root });
 }

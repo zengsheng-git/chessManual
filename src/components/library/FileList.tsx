@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLibraryStore } from "../../stores/libraryStore";
 import { useGameStore } from "../../stores/gameStore";
-import { revealInExplorer, deleteGameFile } from "../../lib/ipc";
+import { revealInExplorer, deleteGameFile, renameGameFile } from "../../lib/ipc";
 import ConfirmDialog from "../common/ConfirmDialog";
 import InputDialog from "../common/InputDialog";
 
@@ -26,6 +26,7 @@ export default function FileList() {
   const [limit, setLimit] = useState(RENDER_LIMIT);
   const [confirmTarget, setConfirmTarget] = useState<{ path: string; name: string } | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<{ path: string; name: string; ext: string } | null>(null);
 
   const normDir = selectedDir.replace(/\\/g, "/").replace(/\/+$/, "");
   const q = query.trim().toLowerCase();
@@ -71,6 +72,25 @@ export default function FileList() {
       await createFolder(name);
     } catch (e) {
       alert(`新建文件夹失败：${e}`);
+    }
+  };
+
+  // 重命名成功后同步打开中棋谱与"最近打开"路径, 再刷新列表
+  const confirmRename = async (newName: string) => {
+    const target = renameTarget;
+    setRenameTarget(null);
+    if (!target) return;
+    try {
+      const newPath = await renameGameFile(target.path, newName);
+      const game = useGameStore.getState();
+      if (game.filePath === target.path) {
+        const base = newPath.split(/[\\/]/).pop();
+        game.setFileInfo(newPath, base ?? target.name);
+      }
+      useLibraryStore.getState().migrateFile(target.path, newPath);
+      await rescan();
+    } catch (e) {
+      alert(`重命名失败：${e}`);
     }
   };
 
@@ -199,6 +219,14 @@ export default function FileList() {
                   📂
                 </button>
                 <button
+                  onClick={() => setRenameTarget({ path: f.path, name: f.name, ext: f.ext })}
+                  title="重命名"
+                  aria-label={`重命名 ${f.name}`}
+                  className="rounded p-1 text-xs leading-none text-ink-300 transition-colors hover:bg-ink-700 hover:text-gold-300"
+                >
+                  ✏️
+                </button>
+                <button
                   onClick={() => remove(f.path, f.name)}
                   title="删除（移入回收站）"
                   aria-label={`删除 ${f.name}`}
@@ -230,6 +258,22 @@ export default function FileList() {
           hint={'名称不能包含 \\ / : * ? " < > | 等字符。'}
           onConfirm={(v) => void confirmCreate(v)}
           onCancel={() => setCreateOpen(false)}
+        />
+      )}
+      {renameTarget && (
+        <InputDialog
+          title="重命名棋谱"
+          message={
+            <span title={renameTarget.path}>
+              将「{renameTarget.name}」改名为：
+            </span>
+          }
+          defaultValue={renameTarget.name.replace(new RegExp(`\\.${renameTarget.ext}$`, "i"), "")}
+          placeholder="请输入新名称"
+          confirmText="重命名"
+          hint={`将保留原扩展名（.${renameTarget.ext}）。名称不能包含 \\ / : * ? " < > | 等字符。`}
+          onConfirm={(v) => void confirmRename(v)}
+          onCancel={() => setRenameTarget(null)}
         />
       )}
     </div>

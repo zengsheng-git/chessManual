@@ -53,6 +53,8 @@ interface GameState {
   pickerOpen: boolean;
   loadGame: (filePath: string, fileName: string) => Promise<void>;
   closeGame: () => void;
+  /** 打开中的棋谱文件（或其所在目录）被重命名后同步路径与文件名，棋局内容与复盘进度不变 */
+  setFileInfo: (filePath: string, fileName: string) => void;
   setPath: (path: number[]) => void;
   goNext: () => void;
   pickBranch: (index: number) => void;
@@ -106,6 +108,8 @@ export const useGameStore = create<GameState>()((set, get) => ({
 
   closeGame: () =>
     set({ game: null, fileName: null, filePath: null, path: [], error: null, pickerOpen: false }),
+
+  setFileInfo: (filePath, fileName) => set({ filePath, fileName }),
 
   setPath: (path) => set({ path, pickerOpen: false }),
 
