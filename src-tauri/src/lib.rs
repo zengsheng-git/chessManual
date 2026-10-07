@@ -132,18 +132,24 @@ fn ensure_in_library(app: &AppHandle, path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// 在资源管理器中打开文件所在文件夹并选中该文件
+/// 在资源管理器中打开路径: 文件定位所在文件夹并选中, 文件夹直接打开; 仅限棋谱库内
 #[tauri::command]
 fn reveal_in_explorer(app: AppHandle, path: String) -> Result<(), String> {
     let p = PathBuf::from(&path);
-    if !p.is_file() {
-        return Err(format!("文件不存在：{}", path));
-    }
     ensure_in_library(&app, &p)?;
-    Command::new("explorer")
-        .arg(format!("/select,{}", p.display()))
-        .spawn()
-        .map_err(|e| format!("打开文件夹失败：{}", e))?;
+    if p.is_file() {
+        Command::new("explorer")
+            .arg(format!("/select,{}", p.display()))
+            .spawn()
+            .map_err(|e| format!("打开文件夹失败：{}", e))?;
+    } else if p.is_dir() {
+        Command::new("explorer")
+            .arg(p.as_os_str())
+            .spawn()
+            .map_err(|e| format!("打开文件夹失败：{}", e))?;
+    } else {
+        return Err(format!("路径不存在：{}", path));
+    }
     Ok(())
 }
 

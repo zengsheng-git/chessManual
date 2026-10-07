@@ -9,7 +9,7 @@ import CommentPanel from "./components/board/CommentPanel";
 import VariationPicker, { type MovePreview } from "./components/board/VariationPicker";
 import RecordPanel from "./components/record/RecordPanel";
 import AnalysisPanel from "./components/analysis/AnalysisPanel";
-import { isTauriEnv } from "./lib/ipc";
+import { isTauriEnv, revealInExplorer } from "./lib/ipc";
 import { useLibraryStore } from "./stores/libraryStore";
 import { currentFen, selectNode, useGameStore } from "./stores/gameStore";
 import { useRecorderStore } from "./stores/recorderStore";
@@ -183,9 +183,15 @@ export default function App() {
         <div className="ml-auto flex items-center gap-2 text-xs text-ink-400">
           {libraryRoot && (
             <>
-              <span className="max-w-[300px] truncate" title={libraryRoot}>
+              <button
+                onClick={() =>
+                  void revealInExplorer(libraryRoot).catch((e) => alert(`打开文件夹失败：${e}`))
+                }
+                title={`${libraryRoot}（点击打开文件夹）`}
+                className="max-w-[300px] truncate transition-colors hover:text-gold-300"
+              >
                 {libraryRoot}
-              </span>
+              </button>
               <span className="rounded-full bg-ink-800 px-2 py-0.5">共 {totalFiles} 盘</span>
             </>
           )}
